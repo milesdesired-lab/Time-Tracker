@@ -147,6 +147,36 @@
     .wa-cmd { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
     .wa-cmd code { font-family: 'DM Mono', monospace; color: var(--accent); font-size: 11px; }
 
+    .report-box { margin: 12px 20px 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 14px 16px; }
+    .report-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; margin-bottom: 10px; }
+    .report-icon { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+    .report-row { display: flex; gap: 8px; align-items: center; }
+    .report-month {
+      flex: 1; background: var(--surface2); border: 1px solid var(--border2);
+      border-radius: var(--rs); padding: 0 10px; height: 36px;
+      color: var(--text); font-size: 13px; font-family: 'DM Mono', monospace; outline: none;
+    }
+    .report-month::-webkit-calendar-picker-indicator { filter: invert(0.7); }
+    .report-btn {
+      height: 36px; padding: 0 14px; border-radius: var(--rs);
+      background: var(--accent); border: none; cursor: pointer;
+      font-size: 12px; font-weight: 600; color: #0f0f0f; font-family: 'DM Sans', sans-serif;
+      white-space: nowrap;
+    }
+    .report-btn:active { opacity: 0.8; transform: scale(0.97); }
+    .report-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .report-info { font-size: 11px; color: var(--muted); margin-top: 8px; }
+    .report-sub { font-size: 11px; color: var(--muted); margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+    .report-sub-title { font-weight: 500; color: var(--text); margin-bottom: 6px; }
+    .archive-list { display: flex; flex-direction: column; gap: 4px; }
+    .archive-link {
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 12px; color: var(--accent); text-decoration: none; padding: 4px 0;
+    }
+    .archive-link:active { opacity: 0.7; }
+    .archive-link span { color: var(--muted); font-size: 11px; font-family: 'DM Mono', monospace; }
+    .archive-empty { font-size: 11px; color: var(--muted); font-style: italic; }
+
     .toast {
       position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
       background: var(--surface2); border: 1px solid var(--border2);
@@ -211,6 +241,21 @@
     <div class="wa-cmd"><code>Urgent: Fix bug</code> → urgent task for today</div>
     <div class="wa-cmd"><code>Urgent 14/05/26: Big deadline</code> → urgent + date</div>
     <div class="wa-cmd"><code>list</code> · <code>all</code> · <code>done 2</code> · <code>delete 3</code></div>
+  </div>
+
+  <div class="report-box">
+    <div class="report-head"><div class="report-icon"></div>Monthly report</div>
+    <div class="report-row">
+      <input class="report-month" type="month" id="report-month"/>
+      <button class="report-btn" id="report-btn" onclick="downloadReport()">↓ CSV</button>
+    </div>
+    <div class="report-info" id="report-info"></div>
+    <div class="report-sub">
+      <div class="report-sub-title">Past reports</div>
+      <div class="archive-list" id="archive-list">
+        <div class="archive-empty">Loading…</div>
+      </div>
+    </div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -397,7 +442,115 @@ function toast(msg) {
 }
 
 document.getElementById('new-text').addEventListener('keydown', e => { if (e.key === 'Enter') addTask(); });
+
+// ── Monthly report: current-month CSV from live data
+(function initReport() {
+  const inp = document.getElementById('report-month');
+  const now = new Date();
+  inp.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+})();
+
+function csvEscape(str) {
+  if (!str) return '';
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return '"' + str.replace(/"/g, '""') + '"';
+  }
+  return str;
+}
+
+async function downloadReport() {
+  const btn = document.getElementById('report-btn');
+  const info = document.getElementById('report-info');
+  const monthVal = document.getElementById('report-month').value;
+  if (!monthVal) { toast('Pick a month first'); return; }
+
+  const [year, month] = monthVal.split('-').map(Number);
+  const startDate = `${year}-${String(month).padStart(2,'0')}-01`;
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const nextYear = month === 12 ? year + 1 : year;
+  const endDate = `${nextYear}-${String(nextMonth).padStart(2,'0')}-01`;
+
+  btn.disabled = true;
+  info.textContent = 'Fetching…';
+
+  try {
+    const rows = await api('GET',
+      `tasks?deadline_date=gte.${startDate}&deadline_date=lt.${endDate}&order=deadline_date.asc,created_at.asc`
+    );
+    if (!rows || !rows.length) {
+      info.textContent = 'No tasks found for this month.';
+      btn.disabled = false;
+      return;
+    }
+
+    const headers = ['Task','Status','Urgent','Type','Date','Time','Created'];
+    const csvRows = [headers.join(',')];
+    for (const t of rows) {
+      csvRows.push([
+        csvEscape(t.text),
+        t.done ? 'Done' : 'Pending',
+        t.urgent ? 'Yes' : 'No',
+        t.deadline_type === 'today' ? 'Today' : 'Scheduled',
+        t.deadline_date || '',
+        t.deadline_time ? t.deadline_time.slice(0,5) : '',
+        t.created_at ? t.created_at.slice(0,16).replace('T',' ') : ''
+      ].join(','));
+    }
+    const csv = csvRows.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    a.download = `tasks-${mn[month-1]}-${year}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    const done = rows.filter(r => r.done).length;
+    info.textContent = `${rows.length} tasks — ${done} done, ${rows.length - done} pending`;
+  } catch (e) {
+    info.textContent = 'Error: ' + e.message;
+  }
+  btn.disabled = false;
+}
+
+// ── Past reports: list archived CSVs from Supabase Storage
+async function loadArchives() {
+  const el = document.getElementById('archive-list');
+  try {
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/list/reports`, {
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`
+      },
+      method: 'POST',
+      body: JSON.stringify({ prefix: '', limit: 100, offset: 0, sortBy: { column: 'name', order: 'desc' } })
+    });
+    if (!res.ok) throw new Error(`${res.status}`);
+    const files = await res.json();
+    const csvFiles = (files || []).filter(f => f.name && f.name.endsWith('.csv'));
+
+    if (!csvFiles.length) {
+      el.innerHTML = '<div class="archive-empty">No archived reports yet. Reports auto-generate on the 1st of each month.</div>';
+      return;
+    }
+
+    el.innerHTML = csvFiles.map(f => {
+      const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/reports/${f.name}`;
+      const sizeKb = f.metadata && f.metadata.size ? (f.metadata.size / 1024).toFixed(1) + ' KB' : '';
+      const label = f.name.replace('.csv', '').replace('tasks-', '');
+      return `<a class="archive-link" href="${publicUrl}" download="${f.name}">${label}<span>${sizeKb}</span></a>`;
+    }).join('');
+  } catch (e) {
+    el.innerHTML = '<div class="archive-empty">Could not load archives.</div>';
+    console.error('Archive list error:', e);
+  }
+}
+
 load();
+loadArchives();
 setInterval(load, 30000);
 </script>
 </body>
