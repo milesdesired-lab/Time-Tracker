@@ -1,8 +1,31 @@
 // api/whatsapp.js
 // Columns used: id, text, urgent, deadline_type, deadline_date, deadline_time, done, reminder_sent, created_at
 
+import crypto from 'node:crypto';
+
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
+const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+
+// Verify Twilio's X-Twilio-Signature: HMAC-SHA1 over the full request URL with
+// POST params appended in sorted key+value order, base64-encoded.
+// https://www.twilio.com/docs/usage/security#validating-requests
+function validTwilioSignature(req, params) {
+  if (!TWILIO_TOKEN) return false; // fail closed — can't verify without the token
+  const signature = req.headers['x-twilio-signature'];
+  if (!signature) return false;
+
+  const proto = req.headers['x-forwarded-proto'] || 'https';
+  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  const url = `${proto}://${host}${req.url}`;
+
+  const data = Object.keys(params).sort().reduce((acc, k) => acc + k + params[k], url);
+  const expected = crypto.createHmac('sha1', TWILIO_TOKEN).update(Buffer.from(data, 'utf-8')).digest('base64');
+
+  const a = Buffer.from(expected);
+  const b = Buffer.from(signature);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
 
 async function db(method, path, body) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -218,7 +241,13 @@ export default async function handler(req, res) {
     }
 
     const body = await readBody(req);
-    console.log('Incoming Twilio body keys:', Object.keys(body));
+
+    // Reject anything that isn't a genuine Twilio request.
+    if (!validTwilioSignature(req, body)) {
+      console.error('Rejected request: invalid or missing Twilio signature');
+      res.setHeader('Content-Type', 'text/plain');
+      return res.status(403).send('Forbidden');
+    }
 
     const msg = (body.Body || '').trim();
     if (!msg) return sendReply('❌ Empty message. Send "help" for examples.');
@@ -227,6 +256,6 @@ export default async function handler(req, res) {
     return sendReply(reply);
   } catch (err) {
     console.error('whatsapp handler error:', err && err.stack || err);
-    return sendReply(`⚠️ Error: ${err.message || 'unknown'}`);
+    return sendReply('⚠️ Something went wrong. Please try again.');
   }
 }

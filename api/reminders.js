@@ -123,12 +123,14 @@ async function deleteTasks(ids) {
 // MAIN HANDLER — runs once daily at 9 AM IST
 // ══════════════════════════════════════════════════════════════
 export default async function handler(req, res) {
-  // Auth
+  // Auth — fail closed. Without a configured secret the job stays locked.
+  if (!CRON_SECRET) {
+    console.error('CRON_SECRET is not set — refusing to run');
+    return res.status(500).json({ error: 'Server not configured' });
+  }
   const authHeader = req.headers['authorization'] || '';
   const qsSecret = (req.query && req.query.secret) || '';
-  const ok = CRON_SECRET
-    ? (authHeader === `Bearer ${CRON_SECRET}` || qsSecret === CRON_SECRET)
-    : true;
+  const ok = authHeader === `Bearer ${CRON_SECRET}` || qsSecret === CRON_SECRET;
   if (!ok) return res.status(401).json({ error: 'Unauthorized' });
 
   if (!SUPABASE_URL || !SUPABASE_KEY) {
