@@ -10,11 +10,10 @@
 🔗 **Live demo:** [task-tracker-one-eta.vercel.app](https://task-tracker-one-eta.vercel.app) — password-gated personal instance, so the dashboard will ask for a passcode.
 
 <p align="center">
-<img src="<img width="1031" height="604" alt="Screenshot 2026-07-01 at 8 30 44 PM" src="https://github.com/user-attachments/assets/c180f7c1-2c6c-464b-8bf0-0557d010fd38" />
-" alt="Adding and listing tasks over WhatsApp" width="48%">
-  &nbsp;
-  <img src="<img width="513" height="733" alt="Screenshot 2026-07-01 at 8 39 39 PM" src="https://github.com/user-attachments/assets/b15db4ec-9d9f-4a9d-93f9-f76183cee109" />
-" alt="The web dashboard" width="48%">
+  <img src="https://github.com/user-attachments/assets/c180f7c1-2c6c-464b-8bf0-0557d010fd38" alt="Adding and listing tasks over WhatsApp" width="85%">
+</p>
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/b15db4ec-9d9f-4a9d-93f9-f76183cee109" alt="The web dashboard" width="42%">
 </p>
 
 ---
