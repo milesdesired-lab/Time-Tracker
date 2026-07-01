@@ -1,4 +1,3 @@
-<img width="1031" height="604" alt="Screenshot 2026-07-01 at 8 30 44 PM" src="https://github.com/user-attachments/assets/f6d5cbcf-57a1-4d5f-9de8-e8c9ed8a72d2" />
 # Time Tracker
 
 **A WhatsApp-native task manager.** Text it like you'd text a person — it files, schedules, reminds you, and archives the month. No app to open.
